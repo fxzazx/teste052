@@ -4,7 +4,8 @@ import sqlite3
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import asyncio
-import interactions
+import discord
+from discord import app_commands
 from aiohttp import ClientSession
 
 app = FastAPI()
@@ -62,32 +63,23 @@ async def get_username(id: int):
         return {"new_username": result[0]}
     raise HTTPException(status_code=404, detail="Jogador não encontrado")
 
-bot = interactions.Client(token="MTI0MjEzNDkxNjc3MDEwMzM0Ng.G9hjYv.gEENkejnMg2-_-ypQynlQMitMK2Ky-eHRZJGSs")
+intents = discord.Intents.default()
+client = discord.Client(intents=intents)
+tree = app_commands.CommandTree(client)
 
-@interactions.slash_command(
-    name="nick",
-    description="Muda o nome do usuário no jogo",
-    options=[
-        interactions.SlashCommandOption(
-            name="userid",
-            description="ID do usuário (1-1999)",
-            type=interactions.OptionType.INTEGER,
-            required=True,
-        ),
-        interactions.SlashCommandOption(
-            name="novonick",
-            description="Novo nome (4-12 caracteres)",
-            type=interactions.OptionType.STRING,
-            required=True,
-        ),
-    ]
-)
-async def nick(ctx: interactions.SlashContext, userid: int, novonick: str):
+@client.event
+async def on_ready():
+    await tree.sync()
+    print(f'Bot conectado como {client.user}')
+
+@tree.command(name="nick", description="Muda o nome do usuário no jogo")
+@app_commands.describe(userid="ID do usuário (1-1999)", novonick="Novo nome (4-12 caracteres)")
+async def nick(interaction: discord.Interaction, userid: int, novonick: str):
     if not (1 <= userid <= 1999):
-        await ctx.send("ID inválido. Deve estar entre 1 e 1999.", ephemeral=True)
+        await interaction.response.send_message("ID inválido. Deve estar entre 1 e 1999.", ephemeral=True)
         return
     if not (4 <= len(novonick) <= 12):
-        await ctx.send("O nome deve ter entre 4 e 12 caracteres.", ephemeral=True)
+        await interaction.response.send_message("O nome deve ter entre 4 e 12 caracteres.", ephemeral=True)
         return
 
     async with ClientSession() as session:
@@ -96,13 +88,13 @@ async def nick(ctx: interactions.SlashContext, userid: int, novonick: str):
             json={"id": userid, "username": novonick}
         ) as response:
             if response.status == 200:
-                await ctx.send(f"Nome alterado para '{novonick}' para o ID {userid}.", ephemeral=True)
+                await interaction.response.send_message(f"Nome alterado para '{novonick}' para o ID {userid}.", ephemeral=True)
             else:
-                await ctx.send("Erro ao atualizar o nome no servidor.", ephemeral=True)
+                await interaction.response.send_message("Erro ao atualizar o nome no servidor.", ephemeral=True)
 
 async def main():
     try:
-        bot_task = asyncio.create_task(bot.start())
+        bot_task = asyncio.create_task(client.start("MTI0MjEzNDkxNjc3MDEwMzM0Ng.G9hjYv.gEENkejnMg2-_-ypQynlQMitMK2Ky-eHRZJGSs"))
         await uvicorn.run(app, host="0.0.0.0", port=8000)
     except Exception as e:
         print(f"Erro: {e}")
